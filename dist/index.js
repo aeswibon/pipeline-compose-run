@@ -46714,74 +46714,60 @@ const pipeline_v2_schema_namespaceObject = /*#__PURE__*/JSON.parse('{"$schema":"
 
 const Ajv = ajv;
 const validator_ajv = new Ajv({ allErrors: true, strict: false });
-const validateV1 = validator_ajv.compile(pipeline_v1_schema_namespaceObject);
+validator_ajv.compile(pipeline_v1_schema_namespaceObject);
 const validateV2 = validator_ajv.compile(pipeline_v2_schema_namespaceObject);
+const V1_UNSUPPORTED_MESSAGE = 'Pipeline schema v1 is not supported in 1.0.0; migrate to version: 2 with pipelines: map (see docs/migration/v0.5.md)';
 function assertSchema(label, validate, data) {
     if (!validate(data)) {
         throw new Error(`Invalid ${label}: ${validator_ajv.errorsText(validate.errors)}`);
     }
 }
-function validator_assertUniqueStageIds(pipeline) {
+function validator_assertUniqueStageIds(stages) {
     const ids = new Set();
-    for (const stage of pipeline.stages) {
+    for (const stage of stages) {
         if (ids.has(stage.id)) {
             throw new Error(`Duplicate stage id: ${stage.id}`);
         }
         ids.add(stage.id);
     }
 }
-function validatePipelineDocument(doc) {
-    if (isPipelineV2(doc)) {
-        assertSchema('pipeline v2', validateV2, doc);
-        for (const [key, def] of Object.entries(doc.pipelines)) {
-            validator_assertUniqueStageIds({
-                name: key,
-                version: 1,
-                stages: def.stages,
-            });
-            sortStages(def.stages);
-        }
-        return resolvePipelineDocument(doc);
+function assertV2Document(doc) {
+    if (!parser_isPipelineV2(doc)) {
+        throw new Error(V1_UNSUPPORTED_MESSAGE);
     }
-    assertSchema('pipeline v1', validateV1, doc);
-    validator_assertUniqueStageIds(doc);
-    const sorted = sortStages(doc.stages);
-    return resolvePipelineDocument({ ...doc, stages: sorted });
+}
+function validateV2Document(doc) {
+    assertSchema('pipeline v2', validateV2, doc);
+    for (const def of Object.values(doc.pipelines)) {
+        validator_assertUniqueStageIds(def.stages);
+        topo_sort_sortStages(def.stages);
+    }
+}
+function validatePipelineDocument(doc) {
+    assertV2Document(doc);
+    validateV2Document(doc);
+    return resolvePipelineDocument(doc);
 }
 function validatePipelineDocuments(docs) {
-    const pipelines = docs.flatMap((doc) => {
-        if (parser_isPipelineV2(doc)) {
-            assertSchema('pipeline v2', validateV2, doc);
-            for (const [key, def] of Object.entries(doc.pipelines)) {
-                validator_assertUniqueStageIds({
-                    name: key,
-                    version: 1,
-                    stages: def.stages,
-                });
-                topo_sort_sortStages(def.stages);
-            }
-        }
-        else {
-            assertSchema('pipeline v1', validateV1, doc);
-            validator_assertUniqueStageIds(doc);
-            topo_sort_sortStages(doc.stages);
-        }
-        return pipelineDocumentToList(doc);
-    });
+    const pipelines = [];
+    for (const doc of docs) {
+        assertV2Document(doc);
+        validateV2Document(doc);
+        pipelines.push(...pipelineDocumentToList(doc));
+    }
     const merged = mergePipelines(pipelines);
-    merged.schemaVersion = docs.some((doc) => parser_isPipelineV2(doc)) ? 2 : 1;
+    merged.schemaVersion = 2;
     return merged;
 }
-function validatePipeline(pipeline) {
-    assertSchema('pipeline v1', validateV1, pipeline);
-    validator_assertUniqueStageIds(pipeline);
-    return { ...pipeline, stages: sortStages(pipeline.stages) };
+/** @deprecated Pipeline v1 removed in 1.0.0 — use validatePipelineDocument with version: 2. */
+function validatePipeline(_pipeline) {
+    throw new Error(V1_UNSUPPORTED_MESSAGE);
 }
 
 ;// CONCATENATED MODULE: ../core/dist/compile/codegen.js
 
 const DEFAULT_WORKFLOW_OUTPUT = '.github/workflows/pipeline.yml';
-const DEFAULT_COMPILE_ACTION = 'aeswibon/pipeline-compose-compile@master';
+const DEFAULT_COMPILE_ACTION = 'aeswibon/pipeline-compose-compile@v1.0.0';
 const DEFAULT_BRANCH = 'master';
 const DEFAULT_TAG_PREFIX = 'v';
 function normalizeWorkflowPath(workflow) {
@@ -46891,26 +46877,12 @@ function generateWorkflow(pipeline, opts = {}) {
 ;// CONCATENATED MODULE: ../core/dist/compile/deprecations.js
 
 
-/** Removed in 1.0.0 — see docs/migration/v0.5.md */
-const DEPRECATION_REMOVAL_VERSION = '1.0.0';
 const MONOREPO_SUBPATH_USES = /uses:\s*['"]?aeswibon\/pipeline-compose\/(run|compile|eval|export|context-merge)/;
 const MASTER_PIN = /uses:\s*[^\s@]+@master\b/;
 const EXPORT_ACTION = /uses:\s*[^\n]*(?:pipeline-compose-export|\/action-export|packages\/action-export)/;
 const UPLOAD_ARTIFACT = /uses:\s*actions\/upload-artifact@/;
 function artifactNameForStage(stageId) {
     return `pipeline-compose-${stageId}`;
-}
-function collectPipelineVersionDeprecations(pipeline) {
-    if (pipeline.schemaVersion !== 1) {
-        return [];
-    }
-    return [
-        {
-            level: 'warn',
-            code: 'pipeline.v1-deprecated',
-            message: `Pipeline schema v1 is deprecated; migrate to version: 2 with pipelines: map (removed in ${DEPRECATION_REMOVAL_VERSION})`,
-        },
-    ];
 }
 function collectWorkflowFileDeprecations(repoRoot, relativePath) {
     const absolutePath = path.resolve(repoRoot, relativePath);
@@ -46921,16 +46893,16 @@ function collectWorkflowFileDeprecations(repoRoot, relativePath) {
     const issues = [];
     if (MONOREPO_SUBPATH_USES.test(content)) {
         issues.push({
-            level: 'warn',
+            level: 'error',
             code: 'uses.monorepo-subpath-deprecated',
-            message: `Workflow ${relativePath} uses legacy aeswibon/pipeline-compose/<action> paths; pin separate action repos (aeswibon/pipeline-compose-run@…, removed in ${DEPRECATION_REMOVAL_VERSION})`,
+            message: `Workflow ${relativePath} uses legacy aeswibon/pipeline-compose/<action> paths; use separate action repos (e.g. aeswibon/pipeline-compose-run@v1.0.0)`,
         });
     }
     if (MASTER_PIN.test(content)) {
         issues.push({
-            level: 'warn',
+            level: 'error',
             code: 'uses.master-pin-deprecated',
-            message: `Workflow ${relativePath} pins actions at @master; use semver tags (@vX.Y.Z, removed in ${DEPRECATION_REMOVAL_VERSION})`,
+            message: `Workflow ${relativePath} pins actions at @master; use a semver tag (e.g. @v1.0.0)`,
         });
     }
     return issues;
@@ -46954,22 +46926,22 @@ function collectStageExportDeprecations(repoRoot, stage) {
     if (hasManualUpload) {
         return [
             {
-                level: 'warn',
+                level: 'error',
                 code: 'export.manual-upload-deprecated',
-                message: `Stage "${stage.id}" uses manual jq/upload-artifact export; use pipeline-compose-export (removed in ${DEPRECATION_REMOVAL_VERSION})`,
+                message: `Stage "${stage.id}" uses manual jq/upload-artifact export; use pipeline-compose-export`,
             },
         ];
     }
     return [
         {
-            level: 'warn',
+            level: 'error',
             code: 'export.missing',
             message: `Stage "${stage.id}" declares outputs but workflow ${relativePath} has no pipeline-compose-export step`,
         },
     ];
 }
 function deprecations_collectDeprecationIssues(pipeline, repoRoot) {
-    const issues = collectPipelineVersionDeprecations(pipeline);
+    const issues = [];
     const scannedWorkflows = new Set();
     for (const stage of pipeline.stages) {
         issues.push(...collectStageExportDeprecations(repoRoot, stage));
@@ -47083,13 +47055,14 @@ function collectPipelineIssues(pipeline, options = {}) {
     return issues;
 }
 function findOrphanWorkflows(repoRoot, pipeline) {
-    const workflowsDir = path.join(repoRoot, '.github', 'workflows');
+    const root = path.resolve(repoRoot);
+    const workflowsDir = path.join(root, '.github', 'workflows');
     if (!fs.existsSync(workflowsDir)) {
         return [];
     }
     const referenced = new Set([
-        ...pipeline.stages.map((stage) => path.normalize(path.resolve(repoRoot, stage.workflow))),
-        ...(pipeline.companion_workflows ?? []).map((workflow) => path.normalize(path.resolve(repoRoot, workflow))),
+        ...pipeline.stages.map((stage) => path.normalize(path.resolve(root, stage.workflow))),
+        ...(pipeline.companion_workflows ?? []).map((workflow) => path.normalize(path.resolve(root, workflow))),
     ]);
     const entries = fs.readdirSync(workflowsDir, { withFileTypes: true });
     const orphans = [];
@@ -47102,7 +47075,7 @@ function findOrphanWorkflows(repoRoot, pipeline) {
         }
         const fullPath = path.normalize(path.join(workflowsDir, entry.name));
         if (!referenced.has(fullPath)) {
-            orphans.push(path.relative(repoRoot, fullPath));
+            orphans.push(path.relative(root, fullPath));
         }
     }
     return orphans.sort();
@@ -47205,8 +47178,84 @@ function serializeValidateReport(report) {
 
 ;// CONCATENATED MODULE: ../core/dist/compile/mermaid.js
 
+const STAGE_IN_MESSAGE = /(?:Stage|stage) "([^"]+)"/;
+const ERROR_SUMMARY_BY_CODE = {
+    'workflow.missing': 'missing workflow file',
+    'stage.repo-invalid': 'invalid repo slug',
+    'group.path-prefix': 'group/path mismatch',
+    'export.missing': 'missing export step',
+    'export.manual-upload-deprecated': 'deprecated manual export',
+    'uses.monorepo-subpath-deprecated': 'legacy action path',
+    'uses.master-pin-deprecated': '@master pin',
+    'pipeline.v1-deprecated': 'schema v1',
+};
+const ERROR_CODE_PRIORITY = (/* unused pure expression or super */ null && ([
+    'workflow.missing',
+    'stage.repo-invalid',
+    'export.missing',
+    'export.manual-upload-deprecated',
+    'group.path-prefix',
+    'uses.monorepo-subpath-deprecated',
+    'uses.master-pin-deprecated',
+    'pipeline.v1-deprecated',
+]));
 function mermaidNodeId(stageId) {
     return stageId.replace(/[^a-zA-Z0-9_]/g, '_');
+}
+function stageIdFromIssue(issue) {
+    const match = issue.message.match(STAGE_IN_MESSAGE);
+    return match?.[1];
+}
+function issuesForStage(issues, stageId) {
+    return issues.filter((issue) => stageIdFromIssue(issue) === stageId);
+}
+function errorStageIds(issues) {
+    const ids = new Set();
+    for (const issue of issues) {
+        if (issue.level !== 'error') {
+            continue;
+        }
+        const stageId = stageIdFromIssue(issue);
+        if (stageId) {
+            ids.add(stageId);
+        }
+    }
+    return ids;
+}
+function blockedStageIds(pipeline, errorIds) {
+    const blocked = new Set();
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const stage of pipeline.stages) {
+            if (errorIds.has(stage.id) || blocked.has(stage.id)) {
+                continue;
+            }
+            for (const dep of stage.needs ?? []) {
+                if (errorIds.has(dep) || blocked.has(dep)) {
+                    blocked.add(stage.id);
+                    changed = true;
+                    break;
+                }
+            }
+        }
+    }
+    return blocked;
+}
+function summarizeStageErrors(issues) {
+    const errors = issues.filter((issue) => issue.level === 'error');
+    if (errors.length === 0) {
+        return '';
+    }
+    const priority = (code) => {
+        const index = ERROR_CODE_PRIORITY.indexOf(code);
+        return index === -1 ? ERROR_CODE_PRIORITY.length : index;
+    };
+    const first = [...errors].sort((a, b) => priority(a.code) - priority(b.code))[0];
+    return ERROR_SUMMARY_BY_CODE[first.code] ?? first.code;
+}
+function escapeMermaidLabel(text) {
+    return text.replace(/"/g, '\\"');
 }
 function stageNodeLabel(stage, pipeline) {
     const group = stage.resolvedGroup ?? resolveStageGroup(stage, pipeline.group);
@@ -47219,13 +47268,30 @@ function stageNodeLabel(stage, pipeline) {
     }
     return parts.join(' ');
 }
-function renderPipelineMermaid(pipeline) {
+function renderPipelineMermaid(pipeline, options = {}) {
+    const issues = options.issues ?? [];
+    const errorsByStage = errorStageIds(issues);
+    const blockedByStage = blockedStageIds(pipeline, errorsByStage);
     const lines = ['flowchart TD'];
     const stageIds = new Set(pipeline.stages.map((stage) => stage.id));
+    let hasErrorStyle = false;
+    let hasBlockedStyle = false;
     for (const stage of pipeline.stages) {
         const nodeId = mermaidNodeId(stage.id);
-        const label = stageNodeLabel(stage, pipeline).replace(/"/g, '\\"');
-        lines.push(`  ${nodeId}["${label}"]`);
+        let label = stageNodeLabel(stage, pipeline);
+        let styleClass = '';
+        if (errorsByStage.has(stage.id)) {
+            const summary = summarizeStageErrors(issuesForStage(issues, stage.id));
+            label = summary ? `${label}<br/>❌ ${summary}` : `${label}<br/>❌ error`;
+            styleClass = ':::error';
+            hasErrorStyle = true;
+        }
+        else if (blockedByStage.has(stage.id)) {
+            label = `${label}<br/>⚠ blocked upstream`;
+            styleClass = ':::blocked';
+            hasBlockedStyle = true;
+        }
+        lines.push(`  ${nodeId}["${escapeMermaidLabel(label)}"]${styleClass}`);
     }
     for (const stage of pipeline.stages) {
         const target = mermaidNodeId(stage.id);
@@ -47244,6 +47310,15 @@ function renderPipelineMermaid(pipeline) {
         }
         lines.push('');
         lines.push('  %% Dotted edges show file order only — add explicit needs: in pipeline.yml');
+    }
+    if (hasErrorStyle || hasBlockedStyle) {
+        lines.push('');
+        if (hasErrorStyle) {
+            lines.push('  classDef error fill:#ffebe9,stroke:#cf222e,stroke-width:2px,color:#1f2328');
+        }
+        if (hasBlockedStyle) {
+            lines.push('  classDef blocked fill:#fff8c5,stroke:#9a6700,stroke-width:2px,color:#1f2328');
+        }
     }
     return lines.join('\n');
 }
@@ -47370,17 +47445,18 @@ function scanWorkflowsForInit(repoRoot) {
 function renderInitPipelineYaml(stages, pipelineName = 'pipeline') {
     const lines = [
         `# Generated by pipeline-compose init — review needs, outputs, and inputs before use`,
-        `name: ${pipelineName}`,
-        'version: 1',
-        'stages:',
+        'version: 2',
+        'pipelines:',
+        `  ${pipelineName}:`,
+        '    stages:',
     ];
     for (const stage of stages) {
-        lines.push(`  - id: ${stage.id}`);
-        lines.push(`    workflow: ${stage.workflow}`);
+        lines.push(`      - id: ${stage.id}`);
+        lines.push(`        workflow: ${stage.workflow}`);
         if (stage.needs && stage.needs.length > 0) {
-            lines.push('    needs:');
+            lines.push('        needs:');
             for (const dep of stage.needs) {
-                lines.push(`      - ${dep}`);
+                lines.push(`          - ${dep}`);
             }
         }
     }
