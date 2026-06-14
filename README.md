@@ -1,0 +1,264 @@
+# pipeline-compose-run
+
+**Run your GitHub workflows in a fixed order** — from one small pipeline file, without one giant workflow or fragile `workflow_run` chains.
+
+Part of [pipeline-compose](https://github.com/aeswibon/pipeline-compose).
+
+---
+
+## Do I need this?
+
+**Yes, if** you have **multiple workflow files** (CI, deploy, release, …) and you care about **which runs first** and **passing values** (version, flags) from one run to the next — especially across repos.
+
+**No, if** a single `.github/workflows/ci.yml` with normal job **`needs:`** is enough.
+
+| You have… | Use |
+|-----------|-----|
+| 3+ workflows that should run in sequence on tag push | **run** + pipeline file |
+| One repo, one workflow, a few jobs | Native GitHub **`needs:`** |
+| Want generated YAML committed to git | [pipeline-compose-compile](https://github.com/aeswibon/pipeline-compose-compile) instead |
+
+You do **not** need compile, eval, or context-merge to get started. You **do** need [pipeline-compose-export](https://github.com/aeswibon/pipeline-compose-export) in any stage that passes data downstream (unless you upload the artifact manually).
+
+---
+
+## How it works (mental model)
+
+Think of **two layers**:
+
+```text
+1. Entry workflow (e.g. release.yml)
+   └── one job that runs THIS action once
+
+2. Pipeline file (.github/pipelines/pipeline.yml)
+   └── list of STAGES = existing workflow files + order + wiring
+```
+
+On each run, this action:
+
+1. Reads the pipeline file  
+2. For each stage (in **`needs`** order): optionally evaluates **`when:`**  
+3. **Dispatches** that stage’s workflow (`workflow_dispatch`)  
+4. **Waits** until it finishes  
+5. Downloads **`outputs.json`** from the stage artifact → adds to **`context`**  
+6. Passes **`context`** into the next stage’s **`inputs`**
+
+```text
+release.yml  →  run action  →  dispatch ci.yml
+                              →  wait ✓
+                              →  dispatch version-sync.yml  (gets version from context)
+                              →  wait ✓
+                              →  …
+```
+
+Your existing workflow **files** stay separate. The pipeline file only answers: *what order* and *what connects to what*.
+
+---
+
+## First-time setup checklist
+
+Copy this list when adding pipeline-compose to a repo:
+
+- [ ] Create **`.github/pipelines/pipeline.yml`** (order + stage ids)  
+- [ ] Create **entry workflow** (e.g. `release.yml`) with **one step**: this action  
+- [ ] Every stage workflow has **`workflow_dispatch:`** in `on:`  
+- [ ] Stage workflow **`inputs:`** match pipeline **`inputs:`** (names and types)  
+- [ ] Stages that pass data declare **`outputs:`** in the pipeline  
+- [ ] Those stages end with **[pipeline-compose-export](https://github.com/aeswibon/pipeline-compose-export)** (or equivalent artifact upload)  
+- [ ] List entry workflow under **`companion_workflows`** if you use strict validate  
+- [ ] Entry job has **`permissions: actions: write`** (and `contents: write` if stages need it)
+
+---
+
+## Quick start — tag release
+
+### Step 1 — Entry workflow
+
+This file **starts** the pipeline. It is **not** a stage.
+
+```yaml
+# .github/workflows/release.yml
+name: Release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  actions: write   # required — run dispatches other workflows
+
+jobs:
+  run-pipeline:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: aeswibon/pipeline-compose-run@v0.4.0
+        with:
+          pipeline_file: .github/pipelines/pipeline.yml
+          github_token: ${{ github.token }}
+```
+
+### Step 2 — Pipeline file (v2)
+
+```yaml
+# .github/pipelines/pipeline.yml
+version: 2
+companion_workflows:
+  - .github/workflows/release.yml   # not a stage — avoids "orphan workflow" in validate
+pipelines:
+  release:
+    stages:
+      - id: ci
+        workflow: .github/workflows/ci.yml
+
+      - id: version-sync
+        workflow: .github/workflows/stage-version-sync.yml
+        needs: [ci]
+        outputs: [version, skip_publish]
+
+      - id: release-publish
+        workflow: .github/workflows/stage-release-publish.yml
+        needs: [version-sync]
+        inputs:
+          version: ${{ context.version-sync.version }}
+          skip_publish: ${{ context.version-sync.skip_publish }}
+```
+
+### Step 3 — Stage workflow example
+
+```yaml
+# .github/workflows/stage-version-sync.yml
+name: Version sync
+on:
+  workflow_dispatch:   # required — run triggers stages this way
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - id: meta
+        run: |
+          echo "version=1.2.3" >> "$GITHUB_OUTPUT"
+          echo "skip_publish=false" >> "$GITHUB_OUTPUT"
+      - uses: aeswibon/pipeline-compose-export@v0.4.0
+        if: success()
+        with:
+          stage_id: version-sync          # must match pipeline id
+          outputs: >-
+            {"version":"${{ steps.meta.outputs.version }}",
+             "skip_publish":"${{ steps.meta.outputs.skip_publish }}"}
+```
+
+Full copy-paste example: [run-tag-release](https://github.com/aeswibon/pipeline-compose/tree/master/examples/run-tag-release).
+
+<!-- start usage -->
+```yaml
+- uses: aeswibon/pipeline-compose-run@v0.4.0
+  with:
+    pipeline_file: .github/pipelines/pipeline.yml
+    github_token: ${{ github.token }}
+```
+<!-- end usage -->
+
+---
+
+## Glossary
+
+| Term | Plain English |
+|------|----------------|
+| **Pipeline file** | Short YAML: stage names, order, who gets which inputs. Not your job scripts. |
+| **Stage** | One existing workflow file run as one step in the pipeline. |
+| **Entry workflow** | The workflow that runs **this action** (e.g. on tag push). Not listed as a stage. |
+| **`companion_workflows`** | Other workflow files you keep on purpose but don’t run as stages (entry, PR bots). Stops false “unused workflow” warnings. |
+| **`id`** | Stage name you choose. Use the same string in export **`stage_id`**. |
+| **`workflow`** | Path to the stage’s `.yml` file. |
+| **`needs`** | “Run B only after A finished successfully.” |
+| **`outputs`** | Keys this stage will send forward (e.g. `version`). |
+| **`inputs`** | Values sent into the stage’s `workflow_dispatch`. Use **`${{ context.other-stage.key }}`**. |
+| **`context`** | Memory of all prior stages’ outputs. Built automatically by this action. |
+| **`when`** | Optional condition. If false, stage is skipped (and stages that depend on it skip too). |
+| **`repo`** | Run this stage in another GitHub repo (`owner/name`). Needs a PAT in **`repo_tokens_json`**. |
+| **Export artifact** | Each stage with **`outputs`** must upload artifact **`pipeline-compose-<id>`** with file **`outputs.json`**. Use **export** action. |
+
+---
+
+## Common questions
+
+**Why can’t I use normal job `outputs` between workflows?**  
+GitHub only exposes **`outputs`** between jobs **in the same workflow run**. Each stage is a **separate** dispatch, so we use a small artifact instead.
+
+**Why does every stage need `workflow_dispatch`?**  
+This action starts stages by calling the Actions API — same as clicking “Run workflow” manually.
+
+**What if a stage fails?**  
+The pipeline stops. This job fails. Later stages don’t run.
+
+**Do I need `companion_workflows`?**  
+Only if you run strict validation and have workflows that aren’t stages (like `release.yml`). Safe to add; it doesn’t change runtime behavior.
+
+**v1 or v2 pipeline?**  
+**v2** = one file, `pipelines:` map (good for one repo). **v1** = `name` + `stages` (good for one pipeline per file in a folder).
+
+**Cross-repo?** Add **`repo: org/repo`** on the stage and **`repo_tokens_json`** on this action. See [export README](https://github.com/aeswibon/pipeline-compose-export) for same-repo setup first.
+
+---
+
+## Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|--------------|-----|
+| `Resource not accessible by integration` | Missing **`actions: write`** | Add to entry workflow **`permissions`** |
+| Stage never receives `version` / inputs empty | No export artifact or wrong **`stage_id`** | Add **export**; **`stage_id`** = pipeline **`id`** |
+| `workflow_dispatch` not found | Stage YAML missing trigger | Add **`on: workflow_dispatch:`** |
+| Pipeline skips a stage | **`when:`** evaluated false | Check expression / **`context`** keys |
+| Strict validate: orphan workflow | Entry workflow not listed | Add to **`companion_workflows`** |
+| Cross-repo 403 | Token can’t dispatch target repo | PAT in **`repo_tokens_json`** with **`actions: write`** on target |
+
+### Cross-repo stages
+
+When a stage sets `repo: other-org/other-repo`, pass tokens GitHub Actions resolves from secrets:
+
+```yaml
+- uses: aeswibon/pipeline-compose-run@v0.4.0
+  with:
+    pipeline_file: .github/pipelines/pipeline.yml
+    github_token: ${{ github.token }}
+    repo_tokens_json: >
+      {"other-org/other-repo":"${{ secrets.REMOTE_DISPATCH_TOKEN }}"}
+```
+
+Tutorial: [docs/tutorials/cross-repo-pipeline.md](https://github.com/aeswibon/pipeline-compose/blob/master/docs/tutorials/cross-repo-pipeline.md)
+
+---
+
+## Inputs
+
+| Input | Required | Default | Description |
+|-------|----------|---------|-------------|
+| `pipeline_file` | file **or** dir | — | Path to pipeline YAML |
+| `pipeline_dir` | file **or** dir | — | Folder of v1 pipeline files |
+| `ref` | no | current ref | Git ref for dispatches |
+| `github_token` | no | `github.token` | Needs **`actions: write`** |
+| `repo_tokens_json` | no | `{}` | `{"owner/repo":"PAT"}` for **`repo:`** stages |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `results_json` | JSON list of each stage: id, run id, outputs, skipped |
+
+---
+
+## Related actions
+
+| Action | When |
+|--------|------|
+| [export](https://github.com/aeswibon/pipeline-compose-export) | **Required** for stages with **`outputs`** |
+| [compile](https://github.com/aeswibon/pipeline-compose-compile) | Alternative: generate static workflow |
+| [eval](https://github.com/aeswibon/pipeline-compose-eval) | Test **`when:`** expressions in isolation |
+| [context-merge](https://github.com/aeswibon/pipeline-compose-context-merge) | Manual JSON file; not used with run |
+
+## License
+
+[MIT](LICENSE)
