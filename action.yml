@@ -1,0 +1,24 @@
+name: Pipeline Compose Run
+description: Run GitHub Actions workflows in order — one pipeline file, no generated YAML
+branding:
+  icon: play
+  color: blue
+inputs:
+  pipeline_file:
+    description: Path to pipeline YAML (stage order and wiring)
+    required: false
+  pipeline_dir:
+    description: Directory of pipeline YAML files (merged by pipeline needs)
+    required: false
+  ref:
+    description: Git ref to dispatch stage workflows on (default GITHUB_REF)
+    required: false
+  github_token:
+    description: Token with actions:write to dispatch workflows
+    required: false
+outputs:
+  results_json:
+    description: JSON array of stage results (id, runId, outputs)
+runs:
+  using: node24
+  main: dist/index.js
