@@ -31,5 +31,7 @@ export type StageResult = {
     outputs: Record<string, string>;
     skipped?: boolean;
     reused?: boolean;
+    /** Prior run duration when smart rerun skipped re-dispatch. */
+    savedSeconds?: number;
 };
 export declare function runPipeline(pipeline: Pipeline, client: GitHubActionsClient, options: OrchestratorOptions): Promise<StageResult[]>;
