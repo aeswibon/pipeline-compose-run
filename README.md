@@ -79,6 +79,38 @@ You can also add `concurrency` on the entry workflow (belt-and-suspenders); valu
 
 ### Parallel stages (siblings with no `needs` between them)
 
+Stages in the same DAG wave run concurrently (since v1.2).
+
+### Global concurrency (cross-repo)
+
+When microservices share an environment, per-repo `concurrency:` blocks are not enough. Set on the pipeline file:
+
+```yaml
+concurrency:
+  group: staging-${{ github.ref }}
+  global: true
+  lock_repo: my-org/pipeline-locks   # optional; defaults to entry repo
+  cancel_in_progress: false
+```
+
+The run action writes `.pipeline-compose/locks/<group>.json` in `lock_repo` and waits until the lock is free. Token needs **`contents: read`** and **`contents: write`** on the lock repository (PAT map or GitHub App).
+
+### Remote catalog
+
+```yaml
+catalog_from:
+  repo: my-org/pipeline-catalog
+  path: .github/pipelines/catalog.yml
+  ref: v1.0.0
+catalog:
+  deploy:
+    workflow: .github/workflows/deploy.yml   # overrides remote key
+```
+
+Fetched at run time; `validate` warns that `catalog_from` needs network + token.
+
+---
+
 **Run action: parallel by wave.** Stages whose `needs` are all satisfied run **concurrently** (same DAG level). The next wave starts only after the current wave finishes.
 
 **Compile action: parallel when GitHub can.** [pipeline-compose-compile](https://github.com/aeswibon/pipeline-compose-compile) emits native `needs:` jobs; GitHub runs independent jobs in parallel.
@@ -178,7 +210,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: aeswibon/pipeline-compose-run@v1.7.0
+      - uses: aeswibon/pipeline-compose-run@v1.8.0
         with:
           pipeline_file: .github/pipelines/pipeline.yml
           github_token: ${{ github.token }}
@@ -227,7 +259,7 @@ jobs:
         run: |
           echo "version=1.2.3" >> "$GITHUB_OUTPUT"
           echo "skip_publish=false" >> "$GITHUB_OUTPUT"
-      - uses: aeswibon/pipeline-compose-export@v1.7.0
+      - uses: aeswibon/pipeline-compose-export@v1.8.0
         if: success()
         with:
           stage_id: version-sync          # must match pipeline id
@@ -240,7 +272,7 @@ Full copy-paste example: [run-tag-release](https://github.com/aeswibon/pipeline-
 
 <!-- start usage -->
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.7.0
+- uses: aeswibon/pipeline-compose-run@v1.8.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
@@ -317,7 +349,7 @@ Entry workflow needs **`permissions: statuses: write`** (and existing `actions: 
 When a stage sets `repo: other-org/other-repo`, pass tokens GitHub Actions resolves from secrets:
 
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.7.0
+- uses: aeswibon/pipeline-compose-run@v1.8.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
@@ -330,7 +362,7 @@ Tutorial: [docs/tutorials/cross-repo-pipeline.md](https://github.com/aeswibon/pi
 Using a GitHub App instead of PAT map:
 
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.7.0
+- uses: aeswibon/pipeline-compose-run@v1.8.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}

@@ -61,6 +61,13 @@ export declare class GitHubActionsClient {
         description: string;
         target_url?: string;
     }): Promise<void>;
+    getRepositoryContent(filePath: string, ref?: string): Promise<{
+        sha: string;
+        content: string;
+        encoding: string;
+    } | null>;
+    putRepositoryContent(filePath: string, message: string, contentUtf8: string, sha?: string): Promise<void>;
+    deleteRepositoryContent(filePath: string, message: string, sha: string): Promise<void>;
     withRepo(owner: string, repo: string, tokenOverride?: string): GitHubActionsClient;
 }
 export declare function stripRefPrefix(ref: string): string;
