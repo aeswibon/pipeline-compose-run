@@ -1,4 +1,5 @@
 import type { Pipeline } from '@aeswibon/pipeline-compose-core';
+import { GitHubAppTokenProvider } from './github-app.js';
 import { type RepoTokenMap } from './repo-tokens.js';
 import { GitHubActionsClient } from './github.js';
 export type OrchestratorOptions = {
@@ -8,6 +9,7 @@ export type OrchestratorOptions = {
     defaultRepo: string;
     githubToken: string;
     repoTokens: RepoTokenMap;
+    appTokenProvider?: GitHubAppTokenProvider;
     /** Parent workflow run id (GITHUB_RUN_ID) for concurrency enforcement. */
     currentRunId?: number;
     /** Reuse prior attempt outputs when stage inputs are unchanged. */
