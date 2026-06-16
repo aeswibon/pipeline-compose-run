@@ -11,6 +11,7 @@ export type WorkflowRun = {
     head_branch: string | null;
     head_sha?: string | null;
     event?: string;
+    workflow_id?: number;
 };
 export declare function matchesDispatchedRun(candidate: WorkflowRun, ref: string, notBeforeMs: number, clockSkewMs?: number): boolean;
 export type WorkflowJob = {
@@ -38,6 +39,13 @@ export declare class GitHubActionsClient {
     dispatchWorkflow(workflowId: number, ref: string, inputs: Record<string, string>): Promise<void>;
     waitForRun(workflowId: number, ref: string, notBeforeMs: number, timeoutMs: number, pollMs: number): Promise<WorkflowRun>;
     waitForRunCompletion(runId: number, timeoutMs: number, pollMs: number): Promise<WorkflowRun>;
+    getWorkflowRun(runId: number): Promise<WorkflowRun & {
+        workflow_id: number;
+    }>;
+    listWorkflowRuns(workflowId: number, opts?: {
+        status?: string;
+    }): Promise<WorkflowRun[]>;
+    cancelWorkflowRun(runId: number): Promise<void>;
     getJob(jobId: number): Promise<WorkflowJob>;
     listRunJobs(runId: number): Promise<WorkflowJob[]>;
     listRunArtifacts(runId: number): Promise<WorkflowArtifact[]>;

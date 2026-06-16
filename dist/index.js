@@ -38311,7 +38311,7 @@ exports.YAMLSeq = YAMLSeq;
 
 var log = __nccwpck_require__(5098);
 var merge = __nccwpck_require__(5863);
-var stringify = __nccwpck_require__(9451);
+var stringify = __nccwpck_require__(1832);
 var identity = __nccwpck_require__(6314);
 var toJS = __nccwpck_require__(5450);
 
@@ -42291,7 +42291,7 @@ exports.foldFlowLines = foldFlowLines;
 
 /***/ }),
 
-/***/ 9451:
+/***/ 1832:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -42436,7 +42436,7 @@ exports.stringify = stringify;
 
 
 var identity = __nccwpck_require__(6314);
-var stringify = __nccwpck_require__(9451);
+var stringify = __nccwpck_require__(1832);
 var stringifyComment = __nccwpck_require__(1618);
 
 function stringifyCollection(collection, ctx, options) {
@@ -42629,7 +42629,7 @@ exports.stringifyComment = stringifyComment;
 
 
 var identity = __nccwpck_require__(6314);
-var stringify = __nccwpck_require__(9451);
+var stringify = __nccwpck_require__(1832);
 var stringifyComment = __nccwpck_require__(1618);
 
 function stringifyDocument(doc, options) {
@@ -42758,7 +42758,7 @@ exports.stringifyNumber = stringifyNumber;
 
 var identity = __nccwpck_require__(6314);
 var Scalar = __nccwpck_require__(360);
-var stringify = __nccwpck_require__(9451);
+var stringify = __nccwpck_require__(1832);
 var stringifyComment = __nccwpck_require__(1618);
 
 function stringifyPair({ key, value }, ctx, onComment, onChompKeep) {
@@ -46645,15 +46645,16 @@ function pipeline_resolve_pipelineDocumentToList(doc) {
     if (!parser_isPipelineV2(doc)) {
         return [doc];
     }
-    return Object.entries(doc.pipelines).map(([key, def]) => definitionToPipeline(key, def, doc.groups));
+    return Object.entries(doc.pipelines).map(([key, def]) => definitionToPipeline(key, def, doc.groups, doc.concurrency));
 }
-function definitionToPipeline(key, def, groups) {
+function definitionToPipeline(key, def, groups, concurrency) {
     return {
         name: key,
         version: 1,
         group: def.group ?? key,
         needs: def.needs,
         groups,
+        concurrency,
         stages: def.stages,
     };
 }
@@ -46681,12 +46682,14 @@ function pipeline_resolve_mergePipelines(pipelines, options = {}) {
     const companion = [
         ...new Set(ordered.flatMap((pipeline) => pipeline.companion_workflows ?? [])),
     ];
+    const concurrency = ordered.find((p) => p.concurrency)?.concurrency;
     return {
         name: ordered.length === 1 ? primary.name : 'combined',
         version: 1,
         group: primary.group,
         groups: primary.groups,
         context: primary.context,
+        concurrency,
         companion_workflows: companion.length > 0 ? companion : undefined,
         stages,
     };
@@ -46721,9 +46724,9 @@ function flattenStages(stages) {
 // EXTERNAL MODULE: ../../node_modules/.pnpm/ajv@8.20.0/node_modules/ajv/dist/ajv.js
 var ajv = __nccwpck_require__(4687);
 ;// CONCATENATED MODULE: ../core/schema/pipeline-v1.schema.json
-const pipeline_v1_schema_namespaceObject = /*#__PURE__*/JSON.parse('{"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://github.com/aeswibon/pipeline-compose/schema/pipeline-v1.schema.json","title":"pipeline-compose pipeline v1","type":"object","required":["name","version","stages"],"additionalProperties":false,"properties":{"name":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"version":{"const":1},"group":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"needs":{"type":"array","items":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"}},"groups":{"type":"object","additionalProperties":{"type":"object","additionalProperties":false,"properties":{"description":{"type":"string"}}}},"companion_workflows":{"type":"array","items":{"type":"string","minLength":1},"maxItems":10},"context":{"type":"object","additionalProperties":{"type":"string"}},"stages":{"type":"array","minItems":1,"maxItems":10,"items":{"$ref":"#/$defs/stage"}}},"$defs":{"stage":{"type":"object","required":["id","workflow"],"additionalProperties":false,"properties":{"id":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"repo":{"type":"string","pattern":"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},"group":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"workflow":{"type":"string","minLength":1},"when":{"type":"string"},"needs":{"type":"array","items":{"type":"string"}},"environment":{"type":"string"},"inputs":{"type":"object","additionalProperties":{"type":"string"}},"outputs":{"type":"array","items":{"type":"string"}}}}}}');
+const pipeline_v1_schema_namespaceObject = /*#__PURE__*/JSON.parse('{"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://github.com/aeswibon/pipeline-compose/schema/pipeline-v1.schema.json","title":"pipeline-compose pipeline v1","type":"object","required":["name","version","stages"],"additionalProperties":false,"properties":{"name":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"version":{"const":1},"group":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"needs":{"type":"array","items":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"}},"groups":{"type":"object","additionalProperties":{"type":"object","additionalProperties":false,"properties":{"description":{"type":"string"}}}},"companion_workflows":{"type":"array","items":{"type":"string","minLength":1},"maxItems":10},"concurrency":{"$ref":"#/$defs/concurrency"},"context":{"type":"object","additionalProperties":{"type":"string"}},"stages":{"type":"array","minItems":1,"maxItems":10,"items":{"$ref":"#/$defs/stage"}}},"$defs":{"concurrency":{"type":"object","additionalProperties":false,"required":["group"],"properties":{"group":{"type":"string","minLength":1},"cancel_in_progress":{"type":"boolean"}}},"stage":{"type":"object","required":["id","workflow"],"additionalProperties":false,"properties":{"id":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"repo":{"type":"string","pattern":"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},"group":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"workflow":{"type":"string","minLength":1},"when":{"type":"string"},"needs":{"type":"array","items":{"type":"string"}},"environment":{"type":"string"},"inputs":{"type":"object","additionalProperties":{"type":"string"}},"outputs":{"type":"array","items":{"type":"string"}}}}}}');
 ;// CONCATENATED MODULE: ../core/schema/pipeline-v2.schema.json
-const pipeline_v2_schema_namespaceObject = /*#__PURE__*/JSON.parse('{"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://github.com/aeswibon/pipeline-compose/schema/pipeline-v2.schema.json","title":"pipeline-compose pipeline v2","type":"object","required":["version","pipelines"],"additionalProperties":false,"properties":{"version":{"const":2},"groups":{"type":"object","additionalProperties":{"type":"object","additionalProperties":false,"properties":{"description":{"type":"string"}}}},"companion_workflows":{"type":"array","items":{"type":"string","minLength":1},"maxItems":10},"pipelines":{"type":"object","minProperties":1,"maxProperties":10,"additionalProperties":{"type":"object","required":["stages"],"additionalProperties":false,"properties":{"group":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"needs":{"type":"array","items":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"}},"stages":{"type":"array","minItems":1,"maxItems":10,"items":{"$ref":"pipeline-v1.schema.json#/$defs/stage"}}}}}}}');
+const pipeline_v2_schema_namespaceObject = /*#__PURE__*/JSON.parse('{"$schema":"http://json-schema.org/draft-07/schema#","$id":"https://github.com/aeswibon/pipeline-compose/schema/pipeline-v2.schema.json","title":"pipeline-compose pipeline v2","type":"object","required":["version","pipelines"],"additionalProperties":false,"properties":{"version":{"const":2},"groups":{"type":"object","additionalProperties":{"type":"object","additionalProperties":false,"properties":{"description":{"type":"string"}}}},"companion_workflows":{"type":"array","items":{"type":"string","minLength":1},"maxItems":10},"concurrency":{"$ref":"pipeline-v1.schema.json#/$defs/concurrency"},"pipelines":{"type":"object","minProperties":1,"maxProperties":10,"additionalProperties":{"type":"object","required":["stages"],"additionalProperties":false,"properties":{"group":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"},"needs":{"type":"array","items":{"type":"string","pattern":"^[a-z][a-z0-9-]*$"}},"stages":{"type":"array","minItems":1,"maxItems":10,"items":{"$ref":"pipeline-v1.schema.json#/$defs/stage"}}}}}}}');
 ;// CONCATENATED MODULE: ../core/dist/compile/validator.js
 
 
@@ -46806,7 +46809,41 @@ function validatePipeline(_pipeline) {
     throw new Error(V1_UNSUPPORTED_MESSAGE);
 }
 
+;// CONCATENATED MODULE: ../core/dist/compile/stage-waves.js
+/** Group stages into waves: each wave's members have all `needs` satisfied by prior waves. */
+function groupStagesIntoWaves(stages) {
+    if (stages.length === 0) {
+        return [];
+    }
+    const byId = new Map(stages.map((s) => [s.id, s]));
+    const pending = new Set(stages.map((s) => s.id));
+    const completed = new Set();
+    const waves = [];
+    while (pending.size > 0) {
+        const wave = [];
+        for (const id of pending) {
+            const stage = byId.get(id);
+            if (!stage) {
+                continue;
+            }
+            if ((stage.needs ?? []).every((dep) => completed.has(dep))) {
+                wave.push(stage);
+            }
+        }
+        if (wave.length === 0) {
+            throw new Error('Cannot schedule stages: unresolved needs (cycle or unknown dependency)');
+        }
+        for (const stage of wave) {
+            pending.delete(stage.id);
+            completed.add(stage.id);
+        }
+        waves.push(wave);
+    }
+    return waves;
+}
+
 ;// CONCATENATED MODULE: ../core/dist/compile/codegen.js
+
 
 const DEFAULT_WORKFLOW_OUTPUT = '.github/workflows/pipeline.yml';
 const DEFAULT_COMPILE_ACTION = 'aeswibon/pipeline-compose-compile@v1.0.0';
@@ -46902,10 +46939,7 @@ function generateWorkflow(pipeline, opts = {}) {
             contents: 'write',
             actions: 'write',
         },
-        concurrency: {
-            group: 'pipeline-${{ github.ref }}',
-            'cancel-in-progress': false,
-        },
+        concurrency: concurrencyFromCodegen(pipeline.concurrency, 'pipeline-${{ github.ref }}'),
         jobs,
     };
     const header = [
@@ -47003,6 +47037,7 @@ function deprecations_collectDeprecationIssues(pipeline, repoRoot) {
 }
 
 ;// CONCATENATED MODULE: ../core/dist/compile/validate-report.js
+
 
 
 
@@ -47112,6 +47147,35 @@ function collectNeedsIssues(stages) {
     }
     return issues;
 }
+function collectContextIssues(stages) {
+    const ids = new Set(stages.map((stage) => stage.id));
+    const outputsByStage = new Map(stages.map((stage) => [stage.id, new Set(stage.outputs ?? [])]));
+    const issues = [];
+    for (const stage of stages) {
+        if (!stage.inputs) {
+            continue;
+        }
+        for (const value of Object.values(stage.inputs)) {
+            for (const { stageId, outputKey } of parseContextInputRefs(value)) {
+                if (!ids.has(stageId)) {
+                    issues.push({
+                        level: 'error',
+                        code: 'context.unknown-stage',
+                        message: `Stage "${stage.id}" references context.${stageId}.${outputKey} but no stage "${stageId}" exists`,
+                    });
+                }
+                else if (!outputsByStage.get(stageId)?.has(outputKey)) {
+                    issues.push({
+                        level: 'error',
+                        code: 'context.unknown-output',
+                        message: `Stage "${stage.id}" references context.${stageId}.${outputKey} but stage "${stageId}" does not declare output "${outputKey}"`,
+                    });
+                }
+            }
+        }
+    }
+    return issues;
+}
 function findOrphanWorkflows(repoRoot, pipeline) {
     const root = path.resolve(repoRoot);
     const workflowsDir = path.join(root, '.github', 'workflows');
@@ -47141,6 +47205,7 @@ function findOrphanWorkflows(repoRoot, pipeline) {
 function buildValidateReport(pipeline, options = {}) {
     const issues = collectPipelineIssues(pipeline, options);
     issues.push(...collectNeedsIssues(pipeline.stages));
+    issues.push(...collectContextIssues(pipeline.stages));
     if (options.repoRoot) {
         issues.push(...collectDeprecationIssues(pipeline, options.repoRoot));
     }
@@ -47243,6 +47308,8 @@ const ERROR_SUMMARY_BY_CODE = {
     'workflow.missing': 'missing workflow file',
     'stage.repo-invalid': 'invalid repo slug',
     'needs.unknown': 'unknown needs stage',
+    'context.unknown-stage': 'unknown context stage',
+    'context.unknown-output': 'unknown context output',
     'group.path-prefix': 'group/path mismatch',
     'export.missing': 'missing export step',
     'export.manual-upload-deprecated': 'deprecated manual export',
@@ -47254,6 +47321,8 @@ const ERROR_CODE_PRIORITY = (/* unused pure expression or super */ null && ([
     'workflow.missing',
     'stage.repo-invalid',
     'needs.unknown',
+    'context.unknown-stage',
+    'context.unknown-output',
     'export.missing',
     'export.manual-upload-deprecated',
     'group.path-prefix',
@@ -47764,7 +47833,25 @@ function expressions_parseRepoSlug(slug) {
     return { owner: match[1], repo: match[2] };
 }
 
+;// CONCATENATED MODULE: ../core/dist/lib/concurrency.js
+/** Resolve `${{ github.ref }}` placeholders in a concurrency group template. */
+function resolveConcurrencyGroup(template, github) {
+    return template.replace(/\$\{\{\s*github\.([a-z_]+)\s*\}\}/gi, (_, key) => String(github[key] ?? ''));
+}
+function concurrency_concurrencyFromCodegen(concurrency, fallbackGroup) {
+    if (!concurrency) {
+        return { group: fallbackGroup, 'cancel-in-progress': false };
+    }
+    return {
+        group: concurrency.group,
+        'cancel-in-progress': concurrency.cancel_in_progress ?? false,
+    };
+}
+
 ;// CONCATENATED MODULE: ../core/dist/index.js
+
+
+
 
 
 
@@ -47897,6 +47984,22 @@ class GitHubActionsClient {
         }
         throw new Error(`Timed out waiting for workflow run ${runId}`);
     }
+    async getWorkflowRun(runId) {
+        return this.request(`/repos/${this.owner}/${this.repo}/actions/runs/${runId}`);
+    }
+    async listWorkflowRuns(workflowId, opts) {
+        const params = new URLSearchParams({ per_page: '30' });
+        if (opts?.status) {
+            params.set('status', opts.status);
+        }
+        const data = await this.request(`/repos/${this.owner}/${this.repo}/actions/workflows/${workflowId}/runs?${params}`);
+        return data.workflow_runs;
+    }
+    async cancelWorkflowRun(runId) {
+        await this.request(`/repos/${this.owner}/${this.repo}/actions/runs/${runId}/cancel`, {
+            method: 'POST',
+        });
+    }
     async getJob(jobId) {
         return this.request(`/repos/${this.owner}/${this.repo}/actions/jobs/${jobId}`);
     }
@@ -47950,6 +48053,68 @@ function sleep(ms) {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+;// CONCATENATED MODULE: ./src/concurrency-enforce.ts
+
+
+function concurrency_enforce_sleep(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+}
+function isActiveRun(run) {
+    return (run.status === 'in_progress' ||
+        run.status === 'queued' ||
+        run.status === 'waiting' ||
+        run.status === 'pending');
+}
+function sameRefRun(run, ref) {
+    const refName = stripRefPrefix(ref);
+    if (run.head_branch === refName) {
+        return true;
+    }
+    if (ref.startsWith('refs/tags/') && run.head_branch == null) {
+        return true;
+    }
+    return false;
+}
+async function findConflictingRuns(client, workflowId, currentRunId, ref) {
+    const [inProgress, queued] = await Promise.all([
+        client.listWorkflowRuns(workflowId, { status: 'in_progress' }),
+        client.listWorkflowRuns(workflowId, { status: 'queued' }),
+    ]);
+    const seen = new Set();
+    const active = [];
+    for (const run of [...inProgress, ...queued]) {
+        if (seen.has(run.id) || run.id === currentRunId) {
+            continue;
+        }
+        if (!isActiveRun(run) || !sameRefRun(run, ref)) {
+            continue;
+        }
+        seen.add(run.id);
+        active.push(run);
+    }
+    return active;
+}
+async function enforcePipelineConcurrency(client, options) {
+    const { currentRunId, ref, concurrency, github, pollMs, timeoutMs } = options;
+    const group = resolveConcurrencyGroup(concurrency.group, github);
+    const cancel = concurrency.cancel_in_progress ?? false;
+    const current = await client.getWorkflowRun(currentRunId);
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        const conflicts = await findConflictingRuns(client, current.workflow_id, currentRunId, ref);
+        if (conflicts.length === 0) {
+            return;
+        }
+        if (cancel) {
+            await Promise.all(conflicts.map((run) => client.cancelWorkflowRun(run.id)));
+            await concurrency_enforce_sleep(pollMs);
+            continue;
+        }
+        await concurrency_enforce_sleep(pollMs);
+    }
+    throw new Error(`Timed out waiting for concurrent pipeline run(s) (concurrency group: ${group})`);
+}
+
 ;// CONCATENATED MODULE: ./src/inputs.ts
 function resolveInputValue(template, context) {
     return template.replace(/\$\{\{\s*context\.([a-z0-9-]+)\.([a-z0-9_]+)\s*\}\}/gi, (_, stageId, key) => context[stageId]?.[key] ?? '');
@@ -48001,6 +48166,7 @@ function resolveStageToken(stageRepo, defaultRepo, githubToken, repoTokens) {
 }
 
 ;// CONCATENATED MODULE: ./src/orchestrator.ts
+
 
 
 
@@ -48081,45 +48247,64 @@ function clientForStage(cache, baseClient, stage, options) {
     cache.set(key, scoped);
     return scoped;
 }
+async function runOneStage(stage, state, options, baseClient, repoClients, timeoutMs, pollMs) {
+    const evalCtx = {
+        github: options.github,
+        context: state.context,
+    };
+    if (hasSkippedDependency(stage, state.skipped)) {
+        state.skipped.add(stage.id);
+        return { stageId: stage.id, runId: 0, outputs: {}, skipped: true };
+    }
+    if (!shouldRunStage(stage, evalCtx)) {
+        state.skipped.add(stage.id);
+        return { stageId: stage.id, runId: 0, outputs: {}, skipped: true };
+    }
+    const missing = missingRequiredContext(stage, state.context);
+    if (missing) {
+        throw new Error(`Stage "${stage.id}" requires context.${missing} from a stage that did not run`);
+    }
+    const stageClient = clientForStage(repoClients, baseClient, stage, options);
+    const workflow = await stageClient.getWorkflowByPath(stage.workflow);
+    const inputs = resolveStageInputs(stage.inputs, state.context);
+    const dispatchAt = Date.now();
+    await stageClient.dispatchWorkflow(workflow.id, options.ref, inputs);
+    let run = await stageClient.waitForRun(workflow.id, options.ref, dispatchAt, timeoutMs, pollMs);
+    run = await stageClient.waitForRunCompletion(run.id, timeoutMs, pollMs);
+    if (run.conclusion !== 'success') {
+        throw new Error(`Stage "${stage.id}" failed (${workflow.path}, run ${run.id}, conclusion=${run.conclusion})`);
+    }
+    const outputs = await collectStageOutputs(stageClient, run.id, stage.id, stage.outputs, timeoutMs, pollMs);
+    return { stageId: stage.id, runId: run.id, outputs };
+}
 async function runPipeline(pipeline, client, options) {
     const timeoutMs = options.timeoutMs ?? 60 * 60 * 1000;
     const pollMs = options.pollMs ?? 10_000;
     const results = [];
-    const skipped = new Set();
-    let context = {};
+    const state = { skipped: new Set(), context: {} };
     const repoClients = new Map();
-    for (const stage of pipeline.stages) {
-        const evalCtx = {
+    if (pipeline.concurrency && options.currentRunId) {
+        await enforcePipelineConcurrency(client, {
+            currentRunId: options.currentRunId,
+            ref: options.ref,
+            concurrency: pipeline.concurrency,
             github: options.github,
-            context: context,
-        };
-        if (hasSkippedDependency(stage, skipped)) {
-            skipped.add(stage.id);
-            results.push({ stageId: stage.id, runId: 0, outputs: {}, skipped: true });
-            continue;
+            pollMs,
+            timeoutMs: Math.min(timeoutMs, 5 * 60 * 1000),
+        });
+    }
+    const waves = groupStagesIntoWaves(pipeline.stages);
+    for (const wave of waves) {
+        const waveResults = await Promise.all(wave.map((stage) => runOneStage(stage, state, options, client, repoClients, timeoutMs, pollMs)));
+        for (const result of waveResults) {
+            if (result.skipped) {
+                state.skipped.add(result.stageId);
+            }
+            else {
+                state.context = mergeContext(state.context, result.stageId, result.outputs);
+            }
+            results.push(result);
         }
-        if (!shouldRunStage(stage, evalCtx)) {
-            skipped.add(stage.id);
-            results.push({ stageId: stage.id, runId: 0, outputs: {}, skipped: true });
-            continue;
-        }
-        const missing = missingRequiredContext(stage, context);
-        if (missing) {
-            throw new Error(`Stage "${stage.id}" requires context.${missing} from a stage that did not run`);
-        }
-        const stageClient = clientForStage(repoClients, client, stage, options);
-        const workflow = await stageClient.getWorkflowByPath(stage.workflow);
-        const inputs = resolveStageInputs(stage.inputs, context);
-        const dispatchAt = Date.now();
-        await stageClient.dispatchWorkflow(workflow.id, options.ref, inputs);
-        let run = await stageClient.waitForRun(workflow.id, options.ref, dispatchAt, timeoutMs, pollMs);
-        run = await stageClient.waitForRunCompletion(run.id, timeoutMs, pollMs);
-        if (run.conclusion !== 'success') {
-            throw new Error(`Stage "${stage.id}" failed (${workflow.path}, run ${run.id}, conclusion=${run.conclusion})`);
-        }
-        const outputs = await collectStageOutputs(stageClient, run.id, stage.id, stage.outputs, timeoutMs, pollMs);
-        context = mergeContext(context, stage.id, outputs);
-        results.push({ stageId: stage.id, runId: run.id, outputs });
     }
     return results;
 }
@@ -48166,6 +48351,7 @@ async function run() {
     const pipeline = validatePipelineDocuments(docs);
     info(`Running pipeline "${pipeline.name}" on ref ${ref}`);
     const client = new GitHubActionsClient(token, owner, repo);
+    const currentRunId = Number(process.env.GITHUB_RUN_ID ?? '0') || undefined;
     const results = await runPipeline(pipeline, client, {
         ref,
         github: githubContextFromEnv(),
@@ -48173,6 +48359,7 @@ async function run() {
         defaultRepo: repo,
         githubToken: token,
         repoTokens,
+        currentRunId,
     });
     setOutput('results_json', JSON.stringify(results));
     info(`Pipeline completed (${results.length} stage(s)).`);

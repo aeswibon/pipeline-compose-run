@@ -8,6 +8,8 @@ export type OrchestratorOptions = {
     defaultRepo: string;
     githubToken: string;
     repoTokens: RepoTokenMap;
+    /** Parent workflow run id (GITHUB_RUN_ID) for concurrency enforcement. */
+    currentRunId?: number;
     timeoutMs?: number;
     pollMs?: number;
 };
