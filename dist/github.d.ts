@@ -12,6 +12,8 @@ export type WorkflowRun = {
     head_sha?: string | null;
     event?: string;
     workflow_id?: number;
+    run_number?: number;
+    run_attempt?: number;
 };
 export declare function matchesDispatchedRun(candidate: WorkflowRun, ref: string, notBeforeMs: number, clockSkewMs?: number): boolean;
 export type WorkflowJob = {
@@ -50,6 +52,8 @@ export declare class GitHubActionsClient {
     listRunJobs(runId: number): Promise<WorkflowJob[]>;
     listRunArtifacts(runId: number): Promise<WorkflowArtifact[]>;
     downloadArtifactOutputs(artifactId: number): Promise<Record<string, string>>;
+    downloadArtifactFile(artifactId: number, fileName: string): Promise<string>;
+    findPreviousAttemptRunId(currentRunId: number, runAttempt: number): Promise<number | null>;
     waitForStageArtifact(runId: number, stageId: string, timeoutMs: number, pollMs: number): Promise<Record<string, string>>;
     withRepo(owner: string, repo: string, tokenOverride?: string): GitHubActionsClient;
 }

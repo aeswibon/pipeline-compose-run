@@ -10,6 +10,13 @@ export type OrchestratorOptions = {
     repoTokens: RepoTokenMap;
     /** Parent workflow run id (GITHUB_RUN_ID) for concurrency enforcement. */
     currentRunId?: number;
+    /** Reuse prior attempt outputs when stage inputs are unchanged. */
+    smartRerun?: boolean;
+    /** GITHUB_RUN_ATTEMPT (1 on first run). */
+    runAttempt?: number;
+    repoRoot?: string;
+    /** Inputs forwarded from a parent sub-pipeline stage. */
+    subPipelineInputs?: Record<string, string>;
     timeoutMs?: number;
     pollMs?: number;
 };
@@ -18,5 +25,6 @@ export type StageResult = {
     runId: number;
     outputs: Record<string, string>;
     skipped?: boolean;
+    reused?: boolean;
 };
 export declare function runPipeline(pipeline: Pipeline, client: GitHubActionsClient, options: OrchestratorOptions): Promise<StageResult[]>;

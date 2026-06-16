@@ -88,6 +88,57 @@ You can also add `concurrency` on the entry workflow (belt-and-suspenders); valu
 | **run** (dispatch) | Yes — same wave dispatches together | `concurrency` in pipeline YAML |
 | **compile** (generated YAML) | Yes — native GHA DAG | `concurrency` in pipeline YAML → generated workflow |
 
+### Smart rerun (failed workflow re-run)
+
+When a pipeline run fails partway through, GitHub’s **Re-run failed jobs** starts a new attempt (`GITHUB_RUN_ATTEMPT` > 1). With **`smart_rerun: true`** on the pipeline file:
+
+```yaml
+version: 2
+smart_rerun: true
+pipelines:
+  release:
+    stages: [...]
+```
+
+The run action saves a **`pipeline-compose-rerun-state`** artifact after each wave. On re-run, stages whose fingerprint (workflow, ref, resolved inputs, `when`) matches the previous attempt reuse cached outputs instead of dispatching again.
+
+Stages with changed inputs or missing prior outputs still dispatch normally.
+
+### Sub-pipelines
+
+A stage can run another pipeline file inline instead of a single workflow:
+
+```yaml
+- id: full-ci
+  pipeline_file: .github/pipelines/pr.yml
+  pipeline: pr
+  outputs:
+    - snapshot_tag
+```
+
+The nested pipeline runs inside the parent stage. Declared `outputs` on the parent stage are collected from nested stage results. **ponytail:** nesting is limited to **one level** (no `pipeline_file` inside a nested pipeline).
+
+Parent stage `inputs` are forwarded to every nested stage dispatch (nested stage inputs win on conflict).
+
+### Typed context (`context_schema`)
+
+Declare expected context shapes per pipeline:
+
+```yaml
+pipelines:
+  release:
+    context_schema:
+      type: object
+      properties:
+        version-sync:
+          type: object
+          properties:
+            version: { type: string }
+    stages: [...]
+```
+
+`pipeline-compose validate` checks that declared stage `outputs` and `context.*` input references match paths in the schema.
+
 ---
 
 ## First-time setup checklist
@@ -127,7 +178,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: aeswibon/pipeline-compose-run@v1.3.0
+      - uses: aeswibon/pipeline-compose-run@v1.4.0
         with:
           pipeline_file: .github/pipelines/pipeline.yml
           github_token: ${{ github.token }}
@@ -176,7 +227,7 @@ jobs:
         run: |
           echo "version=1.2.3" >> "$GITHUB_OUTPUT"
           echo "skip_publish=false" >> "$GITHUB_OUTPUT"
-      - uses: aeswibon/pipeline-compose-export@v1.3.0
+      - uses: aeswibon/pipeline-compose-export@v1.4.0
         if: success()
         with:
           stage_id: version-sync          # must match pipeline id
@@ -189,7 +240,7 @@ Full copy-paste example: [run-tag-release](https://github.com/aeswibon/pipeline-
 
 <!-- start usage -->
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.3.0
+- uses: aeswibon/pipeline-compose-run@v1.4.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
@@ -255,7 +306,7 @@ Only if you run strict validation and have workflows that aren’t stages (like 
 When a stage sets `repo: other-org/other-repo`, pass tokens GitHub Actions resolves from secrets:
 
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.3.0
+- uses: aeswibon/pipeline-compose-run@v1.4.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
