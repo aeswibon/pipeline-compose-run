@@ -1,4 +1,5 @@
 import type { Pipeline } from '@aeswibon/pipeline-compose-core';
+import { type CommitStatusReporter } from './commit-status.js';
 import { GitHubAppTokenProvider } from './github-app.js';
 import { type RepoTokenMap } from './repo-tokens.js';
 import { GitHubActionsClient } from './github.js';
@@ -19,6 +20,8 @@ export type OrchestratorOptions = {
     repoRoot?: string;
     /** Inputs forwarded from a parent sub-pipeline stage. */
     subPipelineInputs?: Record<string, string>;
+    /** Optional PR commit status reporter (entry repo). */
+    commitStatus?: CommitStatusReporter;
     timeoutMs?: number;
     pollMs?: number;
 };

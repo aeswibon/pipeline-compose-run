@@ -55,6 +55,12 @@ export declare class GitHubActionsClient {
     downloadArtifactFile(artifactId: number, fileName: string): Promise<string>;
     findPreviousAttemptRunId(currentRunId: number, runAttempt: number): Promise<number | null>;
     waitForStageArtifact(runId: number, stageId: string, timeoutMs: number, pollMs: number): Promise<Record<string, string>>;
+    createCommitStatus(sha: string, body: {
+        state: 'pending' | 'success' | 'failure' | 'error';
+        context: string;
+        description: string;
+        target_url?: string;
+    }): Promise<void>;
     withRepo(owner: string, repo: string, tokenOverride?: string): GitHubActionsClient;
 }
 export declare function stripRefPrefix(ref: string): string;
