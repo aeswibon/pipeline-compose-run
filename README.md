@@ -132,7 +132,7 @@ pipelines:
     stages: [...]
 ```
 
-The run action saves a **`pipeline-compose-rerun-state`** artifact after each wave. On re-run, stages whose fingerprint (workflow, ref, resolved inputs, `when`, and same-repo workflow file hash) matches the previous attempt reuse cached outputs instead of dispatching again.
+The run action saves a **`pipeline-compose-rerun-state`** artifact after each wave. On re-run, stages whose fingerprint (workflow, ref, resolved inputs, `when`, and workflow file content hash) matches the previous attempt reuse cached outputs instead of dispatching again. Cross-repo stages hash workflow files via the GitHub Contents API.
 
 Stages with changed inputs, edited workflow files, or missing prior outputs still dispatch normally.
 
@@ -212,7 +212,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: aeswibon/pipeline-compose-run@v1.9.0
+      - uses: aeswibon/pipeline-compose-run@v1.10.0
         with:
           pipeline_file: .github/pipelines/pipeline.yml
           github_token: ${{ github.token }}
@@ -261,7 +261,7 @@ jobs:
         run: |
           echo "version=1.2.3" >> "$GITHUB_OUTPUT"
           echo "skip_publish=false" >> "$GITHUB_OUTPUT"
-      - uses: aeswibon/pipeline-compose-export@v1.9.0
+      - uses: aeswibon/pipeline-compose-export@v1.10.0
         if: success()
         with:
           stage_id: version-sync          # must match pipeline id
@@ -274,7 +274,7 @@ Full copy-paste example: [run-tag-release](https://github.com/aeswibon/pipeline-
 
 <!-- start usage -->
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.9.0
+- uses: aeswibon/pipeline-compose-run@v1.10.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
@@ -351,7 +351,7 @@ Entry workflow needs **`permissions: statuses: write`** (and existing `actions: 
 When a stage sets `repo: other-org/other-repo`, pass tokens GitHub Actions resolves from secrets:
 
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.9.0
+- uses: aeswibon/pipeline-compose-run@v1.10.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
@@ -364,7 +364,7 @@ Tutorial: [docs/tutorials/cross-repo-pipeline.md](https://github.com/aeswibon/pi
 Using a GitHub App instead of PAT map:
 
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.9.0
+- uses: aeswibon/pipeline-compose-run@v1.10.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
