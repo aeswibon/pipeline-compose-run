@@ -26,12 +26,15 @@ You do **not** need compile, eval, or context-merge to get started. You **do** n
 
 Think of **two layers**:
 
-```text
-1. Entry workflow (e.g. release.yml)
-   └── one job that runs THIS action once
-
-2. Pipeline file (.github/pipelines/pipeline.yml)
-   └── list of STAGES = existing workflow files + order + wiring
+```mermaid
+flowchart TD
+  subgraph layer1["Layer 1 — Entry workflow"]
+    rw["release.yml<br/>one job → run action"]
+  end
+  subgraph layer2["Layer 2 — Pipeline file"]
+    py[".github/pipelines/pipeline.yml<br/>stages + needs + wiring"]
+  end
+  rw --> py
 ```
 
 On each run, this action:
@@ -43,12 +46,18 @@ On each run, this action:
 5. Downloads **`outputs.json`** from the stage artifact → adds to **`context`**  
 6. Passes **`context`** into the next stage’s **`inputs`**
 
-```text
-release.yml  →  run action  →  dispatch ci.yml
-                              →  wait ✓
-                              →  dispatch version-sync.yml  (gets version from context)
-                              →  wait ✓
-                              →  …
+```mermaid
+sequenceDiagram
+  participant Entry as release.yml
+  participant Run as pipeline-compose-run
+  participant CI as ci.yml
+  participant VS as version-sync.yml
+
+  Entry->>Run: pipeline_file
+  Run->>CI: workflow_dispatch
+  CI-->>Run: complete + export artifact
+  Run->>VS: workflow_dispatch (context)
+  VS-->>Run: complete + export artifact
 ```
 
 Your existing workflow **files** stay separate. The pipeline file only answers: *what order* and *what connects to what*.
@@ -212,7 +221,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - uses: aeswibon/pipeline-compose-run@v1.15.0
+      - uses: aeswibon/pipeline-compose-run@v1.16.0
         with:
           pipeline_file: .github/pipelines/pipeline.yml
           github_token: ${{ github.token }}
@@ -261,7 +270,7 @@ jobs:
         run: |
           echo "version=1.2.3" >> "$GITHUB_OUTPUT"
           echo "skip_publish=false" >> "$GITHUB_OUTPUT"
-      - uses: aeswibon/pipeline-compose-export@v1.15.0
+      - uses: aeswibon/pipeline-compose-export@v1.16.0
         if: success()
         with:
           stage_id: version-sync          # must match pipeline id
@@ -274,7 +283,7 @@ Full copy-paste example: [run-tag-release](https://github.com/aeswibon/pipeline-
 
 <!-- start usage -->
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.15.0
+- uses: aeswibon/pipeline-compose-run@v1.16.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
@@ -351,7 +360,7 @@ Entry workflow needs **`permissions: statuses: write`** (and existing `actions: 
 When a stage sets `repo: other-org/other-repo`, pass tokens GitHub Actions resolves from secrets:
 
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.15.0
+- uses: aeswibon/pipeline-compose-run@v1.16.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
@@ -364,7 +373,7 @@ Tutorial: [docs/tutorials/cross-repo-pipeline.md](https://github.com/aeswibon/pi
 Using a GitHub App instead of PAT map:
 
 ```yaml
-- uses: aeswibon/pipeline-compose-run@v1.15.0
+- uses: aeswibon/pipeline-compose-run@v1.16.0
   with:
     pipeline_file: .github/pipelines/pipeline.yml
     github_token: ${{ github.token }}
